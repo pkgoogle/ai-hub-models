@@ -1,29 +1,20 @@
 import argparse
 import importlib
+import os
 import pkgutil
+import sys
 
 import ai_edge_torch
 import torch
 
 
-"""
-CONFIG = {
-    "aotgan": {
-        "constructor_name": "from_pretrained",
-    },
-    "convnext_tiny": {
-        "constructor_name": "from_pretrained",
-    },
-}
-"""
+SEGFAULT_EXCEPTIONS = ["aotgan", "ddrnet23_slim"]
 
 
 def convert_model(model_name):
     model_module = importlib.import_module("qai_hub_models.models." + model_name)
     model_cls = getattr(model_module, "Model")
 
-    # constructor_name = CONFIG[model_name]["constructor_name"]
-    # if constructor_name == "from_pretrained":
     constructor = getattr(model_cls, "from_pretrained")
     model = constructor()
 
@@ -34,10 +25,13 @@ def convert_model(model_name):
         sample_kwargs[arg_name] = torch.randn(shape, dtype=getattr(torch, dtype))
 
     edge_model = ai_edge_torch.convert(model.eval(), sample_kwargs=sample_kwargs)
-    edge_model.export(model_name + ".tflite")
+    edge_model.export("conversions/" + model_name + ".tflite")
 
 
 def convert(args):
+    os.makedirs("conversions", exist_ok=True)
+    os.makedirs("logs", exist_ok=True)
+
     if args.modelname == "all":
         for module_info in pkgutil.iter_modules(["qai_hub_models/models"]):
             if not module_info.ispkg:
@@ -46,7 +40,25 @@ def convert(args):
             if module_info.name.startswith('_'):
                 continue
 
-            convert_model(module_info.name)
+            model_name = module_info.name
+
+            if model_name in SEGFAULT_EXCEPTIONS:
+                continue # skip for now
+
+            original_stdout = sys.stdout
+            original_stderr = sys.stderr
+
+            with open("logs/" + model_name + ".log", 'a') as f:
+                sys.stdout = f
+                sys.stderr = f
+
+                try:
+                    convert_model(model_name)
+                except:
+                    pass
+
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
     else:
         model_name = args.modelname
         convert_model(model_name)
