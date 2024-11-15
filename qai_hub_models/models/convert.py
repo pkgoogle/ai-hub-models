@@ -3,6 +3,7 @@ import importlib
 import os
 import pkgutil
 import sys
+import traceback
 
 import ai_edge_torch
 import torch
@@ -33,6 +34,14 @@ def convert(args):
     os.makedirs("logs", exist_ok=True)
 
     if args.modelname == "all":
+
+        start_model = None
+        if args.start:
+            start_model = args.start
+            started = False
+        else:
+            started = True
+
         for module_info in pkgutil.iter_modules(["qai_hub_models/models"]):
             if not module_info.ispkg:
                 continue
@@ -41,6 +50,12 @@ def convert(args):
                 continue
 
             model_name = module_info.name
+
+            if not started:
+                if model_name == start_model:
+                    started = True
+                else:
+                    continue
 
             if model_name in SEGFAULT_EXCEPTIONS:
                 continue # skip for now
@@ -54,7 +69,10 @@ def convert(args):
 
                 try:
                     convert_model(model_name)
-                except:
+                except Exception as e:
+                    f.write(f"Error: {e}\n")
+                    traceback.print_exc(file=f)
+                    f.write("-" * 50 + "\n")
                     pass
 
             sys.stdout = original_stdout
@@ -68,6 +86,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Converts Qualcomm Models to TFLite using AI-Edge-Torch")
 
     parser.add_argument("modelname", help="Input modelname, can be all")
+    parser.add_argument("-s", "--start", help="If modelname==all, which model to start converting. Otherwise, ignored.")
 
     args = parser.parse_args()
     convert(args)
