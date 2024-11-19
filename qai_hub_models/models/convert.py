@@ -2,7 +2,6 @@ import argparse
 import importlib
 import os
 import pkgutil
-import sys
 import traceback
 
 import ai_edge_torch
@@ -60,13 +59,7 @@ def convert(args):
             if model_name in SEGFAULT_EXCEPTIONS:
                 continue # skip for now
 
-            original_stdout = sys.stdout
-            original_stderr = sys.stderr
-
             with open("logs/" + model_name + ".log", 'a') as f:
-                sys.stdout = f
-                sys.stderr = f
-
                 try:
                     convert_model(model_name)
                 except Exception as e:
@@ -74,9 +67,6 @@ def convert(args):
                     traceback.print_exc(file=f)
                     f.write("-" * 50 + "\n")
                     pass
-
-            sys.stdout = original_stdout
-            sys.stderr = original_stderr
     else:
         model_name = args.modelname
         convert_model(model_name)
