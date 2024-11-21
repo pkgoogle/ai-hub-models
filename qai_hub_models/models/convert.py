@@ -2,7 +2,6 @@ import argparse
 import importlib
 import os
 import pkgutil
-import sys
 import traceback
 
 import ai_edge_torch
@@ -17,7 +16,11 @@ def convert_model(model_name):
     model_cls = getattr(model_module, "Model")
 
     constructor = getattr(model_cls, "from_pretrained")
-    model = constructor()
+    ctor_kwargs = {}
+    if model_name.startswith("llama_v3"):
+        ctor_kwargs["sequence_length"] = 128
+
+    model = constructor(**ctor_kwargs)
 
     input_spec = model.get_input_spec()
     sample_kwargs = {}
@@ -31,7 +34,7 @@ def convert_model(model_name):
 
 def convert(args):
     os.makedirs("conversions", exist_ok=True)
-    os.makedirs("logs", exist_ok=True)
+    os.makedirs("conversion_logs", exist_ok=True)
 
     if args.modelname == "all":
 
@@ -51,6 +54,9 @@ def convert(args):
 
             model_name = module_info.name
 
+            if args.end and model_name == args.end:
+                break
+
             if not started:
                 if model_name == start_model:
                     started = True
@@ -60,23 +66,13 @@ def convert(args):
             if model_name in SEGFAULT_EXCEPTIONS:
                 continue # skip for now
 
-            original_stdout = sys.stdout
-            original_stderr = sys.stderr
-
-            with open("logs/" + model_name + ".log", 'a') as f:
-                sys.stdout = f
-                sys.stderr = f
-
+            with open("conversion_logs/" + model_name + ".log", 'a') as f:
                 try:
                     convert_model(model_name)
                 except Exception as e:
                     f.write(f"Error: {e}\n")
                     traceback.print_exc(file=f)
-                    f.write("-" * 50 + "\n")
                     pass
-
-            sys.stdout = original_stdout
-            sys.stderr = original_stderr
     else:
         model_name = args.modelname
         convert_model(model_name)
@@ -87,6 +83,7 @@ if __name__ == "__main__":
 
     parser.add_argument("modelname", help="Input modelname, can be all")
     parser.add_argument("-s", "--start", help="If modelname==all, which model to start converting. Otherwise, ignored.")
+    parser.add_argument("-e", "--end", help="If modelname==all, which model to end converting. Otherwise, ignored. Follows range convention. Do not use if you want to convert to the end")
 
     args = parser.parse_args()
     convert(args)
