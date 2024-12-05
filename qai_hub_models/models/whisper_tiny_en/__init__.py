@@ -6,3 +6,5 @@ from qai_hub_models.models._shared.whisper.app import WhisperApp as App  # noqa:
 
 from .model import MODEL_ID  # noqa: F401
 from .model import WhisperTinyEn as Model  # noqa: F401
+from qai_hub_models.models._shared.whisper.model import WhisperEncoderInf
+from qai_hub_models.models._shared.whisper.model import WhisperDecoderInf

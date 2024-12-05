@@ -8,29 +8,76 @@ import ai_edge_torch
 import torch
 
 
-SEGFAULT_EXCEPTIONS = ["aotgan", "ddrnet23_slim"]
+SEGFAULT_EXCEPTIONS = ["aotgan", "ddrnet23_slim", "mediapipe_selfie"]
 
 
-def convert_model(model_name):
-    model_module = importlib.import_module("qai_hub_models.models." + model_name)
-    model_cls = getattr(model_module, "Model")
+def convert_model(model_cls, model_name):
+    try:
+        constructor = getattr(model_cls, "from_pretrained")
+        ctor_kwargs = {}
+        if model_name.startswith("llama_v3"):
+            ctor_kwargs["sequence_length"] = 128
 
-    constructor = getattr(model_cls, "from_pretrained")
-    ctor_kwargs = {}
-    if model_name.startswith("llama_v3"):
-        ctor_kwargs["sequence_length"] = 128
+        model = constructor(**ctor_kwargs)
 
-    model = constructor(**ctor_kwargs)
+        input_spec = model.get_input_spec()
+        sample_kwargs = {}
 
-    input_spec = model.get_input_spec()
-    sample_kwargs = {}
+        for arg_name, (shape, dtype) in input_spec.items():
+            sample_kwargs[arg_name] = torch.randn(shape, dtype=getattr(torch, dtype))
 
-    for arg_name, (shape, dtype) in input_spec.items():
-        sample_kwargs[arg_name] = torch.randn(shape, dtype=getattr(torch, dtype))
+        edge_model = ai_edge_torch.convert(model.eval(), sample_kwargs=sample_kwargs)
+        edge_model.export("conversions/" + model_name + ".tflite")
+    except Exception as e:
+        with open("conversion_logs/" + model_name + ".log", 'a') as f:
+            f.write(f"Error: {e}\n")
+            traceback.print_exc(file=f)
+        print(e)
+        pass
 
-    edge_model = ai_edge_torch.convert(model.eval(), sample_kwargs=sample_kwargs)
-    edge_model.export("conversions/" + model_name + ".tflite")
-
+def convert_module(module_name):
+    model_module = importlib.import_module("qai_hub_models.models." + module_name)
+    if module_name == "openai_clip":
+        text_encoder_cls = getattr(model_module, "ClipTextEncoder")
+        image_encoder_cls = getattr(model_module, "ClipImageEncoder")
+        convert_model(text_encoder_cls, "ClipTextEncoder")
+        convert_model(image_encoder_cls, "ClipImageEncoder")
+    elif module_name.startswith("whisper_"):
+        whisper_encoder_cls = getattr(model_module, "WhisperEncoderInf")
+        whisper_decoder_cls = getattr(model_module, "WhisperDecoderInf")
+        convert_model(whisper_encoder_cls, "WhisperEncoderInf")
+        convert_model(whisper_decoder_cls, "WhisperDecoderInf")
+    elif module_name == "llama_v2_7b_chat_quantized":
+        llama2_cls = getattr(model_module, "Llama2_PromptProcessor_1_Quantized")
+        convert_model(llama2_cls, "Llama2_PromptProcessor_1_Quantized")
+    elif module_name == "mediapipe_face":
+        face_detector_cls = getattr(model_module, "FaceDetector")
+        face_landmark_detector_cls = getattr(model_module, "FaceLandmarkDetector")
+        convert_model(face_detector_cls, "FaceDetector")
+        convert_model(face_landmark_detector_cls, "FaceLandmarkDetector")
+    elif module_name == "mediapipe_face_quantized":
+        face_detector_cls = getattr(model_module, "FaceDetectorQuantizable")
+        face_landmark_detector_cls = getattr(model_module, "FaceLandmarkDetectorQuantizable")
+        convert_model(face_detector_cls, "FaceDetectorQuantizable")
+        convert_model(face_landmark_detector_cls, "FaceLandmarkDetectorQuantizable")
+    elif module_name == "mediapipe_hand":
+        hand_detector_cls = getattr(model_module, "HandDetector")
+        hand_landmark_detector_cls = getattr(model_module, "HandLandmarkDetector")
+        convert_model(hand_detector_cls, "HandDetector")
+        convert_model(hand_landmark_detector_cls, "HandLandmarkDetector")
+    elif module_name == "mediapipe_pose":
+        pose_detector_cls = getattr(model_module, "PoseDetector")
+        pose_landmark_detector_cls = getattr(model_module, "PoseLandmarkDetector")
+        convert_model(pose_detector_cls, "PoseDetector")
+        convert_model(pose_landmark_detector_cls, "PoseLandmarkDetector")
+    elif module_name == "trocr":
+        encoder_cls = getattr(model_module, "TrOCREncoder")
+        decoder_cls = getattr(model_module, "TrOCRDecoder")
+        convert_model(encoder_cls, "TrOCREncoder")
+        convert_model(decoder_cls, "TrOCRDecoder")
+    else:
+        model_cls = getattr(model_module, "Model")
+        convert_model(model_cls, module_name)
 
 def convert(args):
     os.makedirs("conversions", exist_ok=True)
@@ -66,16 +113,10 @@ def convert(args):
             if model_name in SEGFAULT_EXCEPTIONS:
                 continue # skip for now
 
-            with open("conversion_logs/" + model_name + ".log", 'a') as f:
-                try:
-                    convert_model(model_name)
-                except Exception as e:
-                    f.write(f"Error: {e}\n")
-                    traceback.print_exc(file=f)
-                    pass
+            convert_module(model_name)
     else:
         model_name = args.modelname
-        convert_model(model_name)
+        convert_module(model_name)
 
 
 if __name__ == "__main__":

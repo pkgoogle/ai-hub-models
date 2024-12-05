@@ -8,3 +8,5 @@ from qai_hub_models.models.mediapipe_face.app import (  # noqa: F401
 
 from .model import MODEL_ID  # noqa: F401
 from .model import MediaPipeFaceQuantizable as Model  # noqa: F401
+from .model import FaceDetectorQuantizable
+from .model import FaceLandmarkDetectorQuantizable

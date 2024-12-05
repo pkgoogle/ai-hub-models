@@ -6,3 +6,4 @@ from qai_hub_models.models._shared.llama.app import ChatApp as App  # noqa: F401
 
 from .model import MODEL_ID  # noqa: F401
 from .model import Llama2_Quantized as Model  # noqa: F401
+from .model import Llama2_PromptProcessor_1_Quantized
